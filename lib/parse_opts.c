@@ -31,6 +31,7 @@
  * http://oss.sgi.com/projects/GenInfo/NoticeExplan/
  */
 
+#define _GNU_SOURCE
 #include "config.h"
 #include <errno.h>
 #include <stdlib.h>
@@ -41,6 +42,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdint.h>
+#include <sched.h>
 
 #include "test.h"
 #include "ltp_priv.h"
@@ -53,7 +55,7 @@
 
 /* Define flags and args for standard options */
 static int STD_INFINITE = 0;	/* flag indciating to loop forever */
-int STD_LOOP_COUNT = 1;		/* number of iterations */
+uint64_t   STD_LOOP_COUNT = 1;		/* number of iterations */
 
 static float STD_LOOP_DURATION = 0.0;	/* duration value in fractional seconds */
 
@@ -77,7 +79,10 @@ static int STD_LP_recfun = 0;	/* do recressive function calls in TEST_LOOPING */
 static int STD_TP_sbrk = 0;	/* do sbrk in TEST_PAUSE */
 static int STD_LP_sbrk = 0;	/* do sbrk in TEST_LOOPING */
 static char *STD_start_break = 0;	/* original sbrk size */
+static int STD_CPU_TO_RUN_ON = -1;  /* CPU to run on */
 static int Debug = 0;
+
+static uint64_t* perf_bucket = NULL;
 
 static struct std_option_t {
 	char *optstr;
@@ -88,6 +93,7 @@ static struct std_option_t {
 	{"h", "  -h      Show this help screen\n", NULL, NULL},
 	{"i:", "  -i n    Execute test n times\n", NULL, NULL},
 	{"I:", "  -I x    Execute test for x seconds\n", NULL, NULL},
+	{"c:", "  -c p    Execute test on cpu p\n", NULL, NULL},
 #ifdef UCLINUX
 	{"C:",
 	      "  -C ARG  Run the child process with arguments ARG (for internal use)\n",
@@ -215,6 +221,9 @@ const char *parse_opts(int ac, char **av, const option_t * user_optarr,
 			if (STD_LOOP_DURATION == 0.0)
 				STD_INFINITE = 1;
 			break;
+        case 'c': /* CPU to run on */
+            STD_CPU_TO_RUN_ON = atoi(optarg);
+            break;
 		case 'h':	/* Help */
 			print_help(uhf);
 			exit(0);
@@ -440,7 +449,7 @@ const char *parse_opts(int ac, char **av, const option_t * user_optarr,
 #if UNIT_TEST
 	printf("The following variables after option and env parsing:\n");
 	printf("STD_LOOP_DURATION   = %f\n", STD_LOOP_DURATION);
-	printf("STD_LOOP_COUNT      = %d\n", STD_LOOP_COUNT);
+	printf("STD_LOOP_COUNT      = %"PRIu64"\n", STD_LOOP_COUNT);
 	printf("STD_INFINITE        = %d\n", STD_INFINITE);
 #endif
 
@@ -561,6 +570,50 @@ static void usc_recressive_func(int cnt, int max, struct usc_bigstack_t bstack)
 		usc_recressive_func(cnt + 1, max, bstack);
 
 }
+
+uint64_t usc_get_lc()
+{ return STD_LOOP_COUNT; }
+
+void usc_set_cpu()
+{
+    cpu_set_t  cpuset;
+
+    if (STD_CPU_TO_RUN_ON >= 0) {
+        CPU_ZERO(&cpuset);
+        CPU_SET(STD_CPU_TO_RUN_ON, &cpuset);
+        if (sched_setaffinity(getpid(), sizeof(cpu_set_t), &cpuset) != 0) {
+            printf("Faild to set CPU affinity\n");
+            exit(1);
+        }
+    }
+}
+
+uint64_t bucket_size;
+void usc_allocate_perf_bucket(uint64_t bsize)
+{
+    bucket_size = bsize;
+
+    if ((perf_bucket = 
+            calloc(1, sizeof(uint64_t) * bucket_size)) == NULL) {
+        printf("Failed to create Perf data bucket\n");
+        exit(1);
+    }
+}
+
+void usc_add_to_perf_bucket(uint64_t cycle)
+{
+    static uint64_t index = 0;
+
+    if (index < bucket_size) {
+        perf_bucket[index++] = cycle;
+        return;
+    }
+    printf("No space to add data to the bucket\n");
+    exit(1);
+}
+
+uint64_t* usc_get_perf_bucket()
+{ return perf_bucket; }
 
 #if UNIT_TEST
 

@@ -49,7 +49,7 @@
  * The following globals are defined in parse_opts.c but must be
  * externed here because they are used in the macros defined below.
  ***********************************************************************/
-extern int STD_LOOP_COUNT; /* changed by -in to set loop count to n */
+extern uint64_t STD_LOOP_COUNT; /* changed by -in to set loop count to n */
 
 extern long TEST_RETURN;
 extern int TEST_ERRNO;
