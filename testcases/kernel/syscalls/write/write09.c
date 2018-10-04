@@ -72,7 +72,7 @@ static void verify_write(void)
 
 static void setup(void)
 {
-	fd = SAFE_OPEN("/dev/sdc", O_RDWR | O_DIRECT, 0700);
+	fd = SAFE_OPEN("/dev/sde", O_RDWR | O_DIRECT, 0700);
 }
 
 static void cleanup(void)
