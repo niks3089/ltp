@@ -15,6 +15,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -24,6 +25,7 @@
 #include <sys/mount.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sched.h>
 
 #define TST_NO_DEFAULT_MAIN
 #include "tst_test.h"
@@ -48,6 +50,7 @@ static float duration = -1;
 static pid_t main_pid, lib_pid;
 static int mntpoint_mounted;
 static struct timespec tst_start_time; /* valid only for test pid */
+static int STD_CPU_TO_RUN_ON = -1; 
 
 struct results {
 	int passed;
@@ -406,6 +409,7 @@ static struct option {
 	{"i:", "-i n     Execute test n times"},
 	{"I:", "-I x     Execute test for n seconds"},
 	{"C:", "-C ARG   Run child process with ARG arguments (used internally)"},
+	{"c:", "-c cpuid Execute test on cpu"},
 };
 
 static void print_help(void)
@@ -509,6 +513,10 @@ static void parse_opts(int argc, char *argv[])
 			child_args = optarg;
 #endif
 		break;
+        case 'c':
+            STD_CPU_TO_RUN_ON = atoi(optarg);
+			set_cpu();
+        break;
 		default:
 			parse_topt(topts_len, opt, optarg);
 		}
@@ -516,6 +524,19 @@ static void parse_opts(int argc, char *argv[])
 
 	if (optind < argc)
 		tst_brk(TBROK, "Unexpected argument(s) '%s'...", argv[optind]);
+}
+
+void set_cpu()
+{
+    cpu_set_t  cpuset;
+     if (STD_CPU_TO_RUN_ON >= 0) {
+        CPU_ZERO(&cpuset);
+        CPU_SET(STD_CPU_TO_RUN_ON, &cpuset);
+        if (sched_setaffinity(getpid(), sizeof(cpu_set_t), &cpuset) != 0) {
+            printf("Faild to set CPU affinity\n");
+            exit(1);
+        }
+    }
 }
 
 int tst_parse_int(const char *str, int *val, int min, int max)
