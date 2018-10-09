@@ -33,9 +33,13 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h> 
+#include<time.h> 
 #include "tst_test.h"
 
 #define SIZE 512
+#define RANDSIZE 8096
+#define BUF_SIZE 8000000
 
 static int fd;
 static char buf[SIZE];
@@ -43,12 +47,21 @@ static char buf[SIZE];
 static void verify_read(void)
 {
     uint64_t start, end, i = 0;
+    uint64_t rand_arr[RANDSIZE];
+    
+    srand(time(0));
+    for (i = 0; i < RANDSIZE; i++)
+    {
+        rand_arr[i] = rand() % 7999999;
+    }
+
 	SAFE_LSEEK(fd, 0, SEEK_SET);
 
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(i++ < 100000000) {
-        TEST(read(fd, buf, SIZE));
+    while(i++ < 1000000000) {
+        //TEST(read(fd, buf, SIZE));
+        TEST(pread(fd, buf, SIZE, rand_arr[i % RANDSIZE]));
 
         if (TST_RET == -1) {
             tst_res(TFAIL | TTERRNO, "read(2) failed");
@@ -62,8 +75,7 @@ static void verify_read(void)
 
 static void setup(void)
 {
-	memset(buf, '*', SIZE);
-	fd = SAFE_OPEN("/dev/sdb", O_RDWR, 0700);
+	fd = SAFE_OPEN("/dev/sdc", O_RDWR, 0700);
 	//SAFE_WRITE(1, fd, buf, SIZE);
 }
 
