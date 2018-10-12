@@ -36,11 +36,17 @@ static int fd;
 #define RANDSIZE 8096
 #define BUF_SIZE 8000000
 
+static uint64_t timespec_to_ns(struct timespec* ts)
+{
+    return ts->tv_nsec + (ts->tv_sec * 1000000000LL); 
+}
+
 static void verify_write(void)
 {
 	int i, badcount = 0;
     uint64_t start, end;
     uint64_t rand_arr[RANDSIZE];
+    struct timespec before = { 0 }, after = { 0 };
 	char buf[5]= {'1', '2', '3', '4', '5'};
 
     srand(time(0));
@@ -52,6 +58,7 @@ static void verify_write(void)
 	SAFE_LSEEK(fd, 0, SEEK_SET);
 
     SYSCALL_PERF_SET_CPU();
+    clock_gettime(CLOCK_MONOTONIC, &before);
     start = SYSCALL_PERF_GET_TICKS();
     for (i = 0; i < BUF_SIZE; i++) {
         pwrite(fd, &buf[i % 5], 1, rand_arr[i % RANDSIZE]);
@@ -62,7 +69,9 @@ static void verify_write(void)
         }
     }
     end = SYSCALL_PERF_GET_TICKS();
+    clock_gettime(CLOCK_MONOTONIC, &after);
     SYSCALL_PERF_MEASURE(start, end);
+    printf("Time diff: %"PRIu64" ns\n", timespec_to_ns(&after) - timespec_to_ns(&before));
 
 	if (badcount != 0)
 		tst_res(TFAIL, "write() failed to return proper count");

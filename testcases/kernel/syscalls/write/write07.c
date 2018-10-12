@@ -53,7 +53,7 @@ static void verify_write(void)
 
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    //while (1) {
+    while (1) {
         for (i = 0; i < BUF_SIZE; i++) {
             pwrite(fd, &buf[i % 5], 1, rand_arr[i % RANDSIZE]);
             if (TST_RET == -1) {
@@ -62,7 +62,7 @@ static void verify_write(void)
                 break;
             }
         }
-    //}
+    }
     end = SYSCALL_PERF_GET_TICKS();
     SYSCALL_PERF_MEASURE(start, end);
 
