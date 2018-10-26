@@ -81,6 +81,7 @@ static int STD_LP_sbrk = 0;	/* do sbrk in TEST_LOOPING */
 static char *STD_start_break = 0;	/* original sbrk size */
 static int STD_CPU_TO_RUN_ON = -1;  /* CPU to run on */
 static int Debug = 0;
+char pmisc_arg[100] = { 0 };
 
 static uint64_t* perf_bucket = NULL;
 
@@ -94,6 +95,7 @@ static struct std_option_t {
 	{"i:", "  -i n    Execute test n times\n", NULL, NULL},
 	{"I:", "  -I x    Execute test for x seconds\n", NULL, NULL},
 	{"c:", "  -c p    Execute test on cpu p\n", NULL, NULL},
+	{"m:", "  -m p    Execute test on cpu p\n", NULL, NULL},
 #ifdef UCLINUX
 	{"C:",
 	      "  -C ARG  Run the child process with arguments ARG (for internal use)\n",
@@ -223,6 +225,9 @@ const char *parse_opts(int ac, char **av, const option_t * user_optarr,
 			break;
         case 'c': /* CPU to run on */
             STD_CPU_TO_RUN_ON = atoi(optarg);
+            break;
+        case 'm':
+            strncpy(pmisc_arg, optarg, strlen(optarg));
             break;
 		case 'h':	/* Help */
 			print_help(uhf);

@@ -44,6 +44,8 @@
 #include "tst_path_has_mnt_flags.h"
 #include "tst_syscall_perf.h"
 
+extern char misc_arg[100];
+
 /*
  * Reports testcase result.
  */

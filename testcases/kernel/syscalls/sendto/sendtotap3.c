@@ -167,7 +167,7 @@ static void verify_sendto(void)
 
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(1) {
+    while(i++ < 10000000) {
         if (write(sockfd, (uint8_t *)&p, sizeof p) < 0) {
             printf("Could not send Ping packet\n");
         }

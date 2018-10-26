@@ -60,6 +60,7 @@ static void setup(void)
 	memset(&sa, 0, sizeof(sa));
 	sa.sin_family = AF_INET;
 	sa.sin_addr.s_addr = inet_addr("10.0.0.100");
+	//sa.sin_addr.s_addr = inet_addr("9.74.11.26");
 	sa.sin_port = htons(11111);
 
     memset(buf, 'a', sizeof(buf));
@@ -82,9 +83,8 @@ static void verify_sendto(void)
     uint64_t start, end, i = 0;
 
     SYSCALL_PERF_SET_CPU();
-    clock_gettime(CLOCK_MONOTONIC, &before);
     start = SYSCALL_PERF_GET_TICKS();
-    while(i++ < 1000000) {
+    while(i++ < 1) {
 	    TEST(sendto(sockfd, buf, 1300, 0, (struct sockaddr *) &sa, sizeof(sa)));
 
         if (TST_RET == -1) {
@@ -93,9 +93,7 @@ static void verify_sendto(void)
         }
     }
     end = SYSCALL_PERF_GET_TICKS();
-    clock_gettime(CLOCK_MONOTONIC, &after);
     SYSCALL_PERF_MEASURE(start, end);
-    printf("Time diff: %"PRIu64" ns\n", timespec_to_ns(&after) - timespec_to_ns(&before));
     tst_res(TPASS, "sendto returned %ld, %lld", TST_RET, i);
 }
 

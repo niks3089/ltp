@@ -45,6 +45,7 @@
 static int buf[1300];
 static int sockfd;
 static struct sockaddr_in sa;
+struct sockaddr recv_addr;
 
 static void setup(void)
 {
@@ -59,7 +60,7 @@ static void setup(void)
 
 	memset(&sa, 0, sizeof(sa));
 	sa.sin_family = AF_INET;
-	sa.sin_addr.s_addr = inet_addr("11.0.0.100");
+	sa.sin_addr.s_addr = inet_addr("10.0.0.100");
 	sa.sin_port = htons(11111);
 
     memset(buf, 'a', sizeof(buf));
@@ -77,18 +78,25 @@ static void verify_sendto(void)
 
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(1) {
-    //while(i++ < 1000000) {
-	    TEST(sendto(sockfd, buf, 1300, 0, (struct sockaddr *) &sa, sizeof(sa)));
+    //while(1) {
+    TEST(sendto(sockfd, buf, 1300, 0, (struct sockaddr *) &sa, sizeof(sa)));
 
-        if (TST_RET == -1) {
-            tst_res(TFAIL | TTERRNO, "read(2) failed");
-            break;
-        }
+    if (TST_RET == -1) {
+        tst_res(TFAIL | TTERRNO, "read(2) failed");
+        return;
     }
     end = SYSCALL_PERF_GET_TICKS();
     SYSCALL_PERF_MEASURE(start, end);
     tst_res(TPASS, "sendto returned %ld, %lld", TST_RET, i);
+    printf("Reading from the same socket\n");
+    int addrlen = sizeof(recv_addr);
+    int bytes_read;
+
+    while(i++ < 50000) {
+        bytes_read += recvfrom(sockfd, buf, 1300, 0, &recv_addr, &addrlen);
+        printf("%d\n", i);
+    }
+    printf("Bytes read: %d\n", bytes_read);
 }
 
 static struct tst_test test = {

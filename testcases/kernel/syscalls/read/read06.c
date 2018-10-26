@@ -59,7 +59,8 @@ static void verify_read(void)
 
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(i++ < 1000000000) {
+    while(1) {
+    //while(i++ < 1000000000) {
         //TEST(read(fd, buf, SIZE));
         TEST(pread(fd, buf, SIZE, rand_arr[i % RANDSIZE]));
 
