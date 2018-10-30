@@ -51,7 +51,7 @@ static pid_t main_pid, lib_pid;
 static int mntpoint_mounted;
 static struct timespec tst_start_time; /* valid only for test pid */
 static int STD_CPU_TO_RUN_ON = -1; 
-uint64_t loop_count = 1;
+int64_t loop_count = 1;
 char misc_arg[100] = { 0 };
 
 struct results {

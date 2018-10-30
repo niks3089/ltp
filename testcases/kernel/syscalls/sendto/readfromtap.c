@@ -177,12 +177,14 @@ static void cleanup(void)
 		SAFE_CLOSE(sockfd);
 }
 
-static void verify_sendto(void)
+static void verify_readfrom(void)
 {
 
-    uint64_t start, end, i = 0;
+    uint64_t start, end, i = 0, total_read;
+    int bytes_read;
 
     struct udppkt p = { 0 };
+    struct udppkt r = { 0 };
     
     p.ip.version_ihl = 0x45;
     p.ip.type = 0x00;
@@ -203,20 +205,27 @@ static void verify_sendto(void)
     memcpy(p.ether.target, macaddr_brd, HLEN_ETHER);
     memset(p.data, 'a', PACKET_SIZE);
 
+    if (write(sockfd, (uint8_t *)&p, sizeof p) < 0) {
+        printf("Could not read packet\n");
+    }
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(i++ < loop_count || loop_count < 0) {
-        if (write(sockfd, (uint8_t *)&p, sizeof p) < 0) {
-            printf("Could not send Ping packet\n");
+    while(i++ < loop_count) {
+        while ((bytes_read = read(sockfd, (uint8_t *)&p, sizeof p)) < 0 && errno == EAGAIN) {
+            //printf("Could not read packet: %d, %s, totalr:%lld\n",
+            //        errno, strerror(errno), i);
         }
+        total_read += bytes_read;
+        printf("read packet: totalr:%lld\n", i);
     }
     end = SYSCALL_PERF_GET_TICKS();
     SYSCALL_PERF_MEASURE(start, end);
-    tst_res(TPASS, "sendto returned %ld, %lld", TST_RET, i);
+    tst_res(TPASS, "Read returned %ld, total read: %lld,"
+            " bytes read: %lld", TST_RET, i - 1, total_read);
 }
 
 static struct tst_test test = {
 	.setup = setup,
 	.cleanup = cleanup,
-	.test_all = verify_sendto,
+	.test_all = verify_readfrom,
 };

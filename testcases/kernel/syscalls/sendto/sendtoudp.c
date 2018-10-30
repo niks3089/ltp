@@ -89,7 +89,7 @@ static void verify_sendto(void)
 
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(i++ < 1) {
+    while(i++ < loop_count || loop_count < 0) {
 	    TEST(sendto(sockfd, buf, 1300, 0, (struct sockaddr *) &sa, sizeof(sa)));
 
         if (TST_RET == -1) {

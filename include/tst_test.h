@@ -44,7 +44,7 @@
 #include "tst_path_has_mnt_flags.h"
 #include "tst_syscall_perf.h"
 
-extern uint64_t loop_count;
+extern int64_t loop_count;
 extern char misc_arg[100];
 
 /*
