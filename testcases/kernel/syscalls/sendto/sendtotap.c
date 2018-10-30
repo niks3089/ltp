@@ -53,7 +53,6 @@
 static int sockfd;
 
 #define ETHERTYPE_IP  0x0800
-#define ETHERTYPE_ARP 0x0806
 #define HLEN_ETHER  6
 #define PLEN_IPV4  4
 
@@ -76,30 +75,64 @@ struct ip {
     uint8_t dst_ip[PLEN_IPV4];
 };
 
-struct ping {
-    uint8_t type;
-    uint8_t code;
-    uint16_t checksum;
-    uint16_t id;
-    uint16_t seqnum;
-    uint8_t data[0];
+struct udp {
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t check;
 };
 
-struct pingpkt {
+struct udppkt {
     struct ether ether;
     struct ip ip;
-    struct ping ping;
+    struct udp udp;
+    char   data[PACKET_SIZE];
 };
 
-uint8_t ipaddr[4] = { 0x0b, 0x00, 0x00, 0x22 }; /* 11.0.0.2 */
-uint8_t srcaddr[4] = { 0x0b, 0x00, 0x00, 0x12 }; /* 11.0.0.2 */
-uint8_t macaddr[HLEN_ETHER] = {0x02, 0x01, 0x02, 0x03, 0x04, 0x09}; // Hardcode this based on tap101
-uint8_t macaddr_brd[HLEN_ETHER] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+struct interface_info {
+    char    tap_name[10];
+    uint8_t dest_addr[4];
+    uint8_t src_addr[4];
+    uint8_t macaddr[HLEN_ETHER];
+};
+
+struct interface_info if_info = { 0 };
+
+int tap_init_id = 100;
+uint8_t def_dest_addr[4] = { 0x0a, 0x00, 0x00, 0x22 }; /* 10.0.0.34 */
+uint8_t def_src_addr[4] = { 0x0a, 0x00, 0x00, 0x12 }; /* 10.0.0.18 */
+uint8_t def_macaddr[HLEN_ETHER] = {0x02, 0x01, 0x02, 0x03, 0x04, 0x10}; 
+int8_t macaddr_brd[HLEN_ETHER] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+
+void initialise_interface(int offset)
+{
+    int tap_id = tap_init_id + offset;
+    sprintf(if_info.tap_name, "tap%d", tap_id);
+    
+    memcpy(if_info.dest_addr, def_dest_addr, PLEN_IPV4);
+    if_info.dest_addr[0] += offset;
+
+    memcpy(if_info.src_addr, def_src_addr, PLEN_IPV4);
+    if_info.src_addr[0] += offset;
+
+    memcpy(if_info.macaddr, def_macaddr, HLEN_ETHER);
+    if_info.macaddr[0] += offset;
+    printf("Running test for tap: %s\n", if_info.tap_name);
+}
 
 static void setup(void)
 {
+    int tap_offset = 0;
+
+    if (strlen(misc_arg)) {
+        tap_offset = strtoumax(misc_arg, NULL, 10);
+        printf("Creating interface for offset %d\n", tap_offset);
+    }
+
+    initialise_interface(tap_offset);
+
     // Assume tap interface is created
-    const char *ifname = "tap101";
+    const char *ifname = if_info.tap_name;
     int err;
     struct ifreq ifr;
 
@@ -147,28 +180,33 @@ static void cleanup(void)
 
 static void verify_sendto(void)
 {
+
     uint64_t start, end, i = 0;
 
-    struct pingpkt p = { 0 };
+    struct udppkt p = { 0 };
     
     p.ip.version_ihl = 0x45;
     p.ip.type = 0x00;
-    p.ip.proto = 0x01;
-    memcpy(p.ip.src_ip, srcaddr, PLEN_IPV4);
-    memcpy(p.ip.dst_ip, ipaddr, PLEN_IPV4);
+    p.ip.proto = 0x11;
+    p.ip.length = htons(20 + 8 + PACKET_SIZE); 
+    memcpy(p.ip.src_ip, if_info.src_addr, PLEN_IPV4);
+    memcpy(p.ip.dst_ip, if_info.dest_addr, PLEN_IPV4);
 
-    p.ping.type = 0x08;
-    p.ping.code = 0x00;
+    p.udp.source = htons(5555);
+    p.udp.dest = htons(5555);
+    p.udp.len = htons(8 + PACKET_SIZE); 
+    p.udp.check = 0;
+
     p.ip.checksum = 0;
 
     p.ether.type = htons(ETHERTYPE_IP);
-    memcpy(p.ether.source, macaddr, HLEN_ETHER);
+    memcpy(p.ether.source, if_info.macaddr, HLEN_ETHER);
     memcpy(p.ether.target, macaddr_brd, HLEN_ETHER);
+    memset(p.data, 'a', PACKET_SIZE);
 
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(1) {
-    //while(i++ < 10000000) {
+    while(i++ < loop_count) {
         if (write(sockfd, (uint8_t *)&p, sizeof p) < 0) {
             printf("Could not send Ping packet\n");
         }

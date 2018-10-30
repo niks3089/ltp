@@ -42,12 +42,18 @@
 
 #define RANDOM_SIZE 8000000
 #define PACKET_SIZE  1300
+#define SERVER_ADDRESS  "10.0.0.100"
 static int buf[1300];
 static int sockfd;
 static struct sockaddr_in sa;
 
 static void setup(void)
 {
+    char *server_addr = SERVER_ADDRESS; 
+
+    if (strlen(misc_arg)) {
+        server_addr = misc_arg;
+    }
 	sockfd = socket(PF_INET, SOCK_DGRAM, 0);
 
 	if (sockfd == -1) {
@@ -59,10 +65,15 @@ static void setup(void)
 
 	memset(&sa, 0, sizeof(sa));
 	sa.sin_family = AF_INET;
-	sa.sin_addr.s_addr = inet_addr("11.0.0.100");
-	sa.sin_port = htons(11111);
+	sa.sin_addr.s_addr = inet_addr(server_addr);
+	sa.sin_port = htons(5555);
 
     memset(buf, 'a', sizeof(buf));
+}
+
+static uint64_t timespec_to_ns(struct timespec* ts)
+{
+    return ts->tv_nsec + (ts->tv_sec * 1000000000LL); 
 }
 
 static void cleanup(void)
@@ -73,12 +84,12 @@ static void cleanup(void)
 
 static void verify_sendto(void)
 {
+    struct timespec before = { 0 }, after = { 0 };
     uint64_t start, end, i = 0;
 
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(1) {
-    //while(i++ < 1000000) {
+    while(i++ < 1) {
 	    TEST(sendto(sockfd, buf, 1300, 0, (struct sockaddr *) &sa, sizeof(sa)));
 
         if (TST_RET == -1) {
