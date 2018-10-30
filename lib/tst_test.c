@@ -51,6 +51,7 @@ static pid_t main_pid, lib_pid;
 static int mntpoint_mounted;
 static struct timespec tst_start_time; /* valid only for test pid */
 static int STD_CPU_TO_RUN_ON = -1; 
+uint64_t loop_count = 1;
 char misc_arg[100] = { 0 };
 
 struct results {
@@ -412,6 +413,7 @@ static struct option {
 	{"C:", "-C ARG   Run child process with ARG arguments (used internally)"},
 	{"c:", "-c cpuid Execute test on cpu"},
 	{"m:", "-m Miscellenous arg to the test"},
+	{"l:", "-l Loop count within a single test"},
 };
 
 static void print_help(void)
@@ -521,6 +523,9 @@ static void parse_opts(int argc, char *argv[])
         break;
         case 'm':
             strncpy(misc_arg, optarg, strlen(optarg));
+        break;
+        case 'l':
+			loop_count = atoi(optarg);
         break;
 		default:
 			parse_topt(topts_len, opt, optarg);
