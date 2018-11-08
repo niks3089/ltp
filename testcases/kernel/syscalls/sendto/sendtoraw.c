@@ -41,6 +41,9 @@
 #include <sys/socket.h>
 #include <linux/if.h>
 #include <linux/if_tun.h>
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
+#include <arpa/inet.h>
 
 #include "tst_test.h"
 
@@ -90,7 +93,7 @@ struct udppkt {
 };
 
 struct interface_info {
-    char    tap_name[10];
+    char    raw_name[10];
     uint8_t dest_addr[4];
     uint8_t src_addr[4];
     uint8_t macaddr[HLEN_ETHER];
@@ -98,15 +101,15 @@ struct interface_info {
 
 struct interface_info if_info = { 0 };
 
-int tap_init_id = 100;
-uint8_t def_dest_addr[4] = { 0x0a, 0x00, 0x00, 0x22 }; /* 10.0.0.34 */
+int raw_init_id = 100;
+uint8_t def_dest_addr[4] = { 0x64, 0x00, 0x00, 0x64 }; /* 100.0.0.10 */
 uint8_t def_src_addr[4] = { 0x0a, 0x00, 0x00, 0x12 }; /* 10.0.0.18 */
 uint8_t def_macaddr[HLEN_ETHER] = {0x02, 0x01, 0x02, 0x03, 0x04, 0x11}; 
 int8_t macaddr_brd[HLEN_ETHER] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
 void initialise_interface(int offset)
 {
-    sprintf(if_info.tap_name, "tap10%d", offset);
+    sprintf(if_info.raw_name, "veth%d", offset + 1);
     
     memcpy(if_info.dest_addr, def_dest_addr, PLEN_IPV4);
     if_info.dest_addr[0] += offset;
@@ -116,59 +119,37 @@ void initialise_interface(int offset)
 
     memcpy(if_info.macaddr, def_macaddr, HLEN_ETHER);
     if_info.macaddr[5] += offset;
-    printf("Running test for tap: %s\n", if_info.tap_name);
+    printf("Running test for raw: %s\n", if_info.raw_name);
 }
 
 static void setup(void)
 {
-    int tap_offset = 0;
+    int raw_offset = 0;
 
     if (strlen(misc_arg)) {
-        tap_offset = strtoumax(misc_arg, NULL, 10);
-        printf("Creating interface for offset %d\n", tap_offset);
+        raw_offset = strtoumax(misc_arg, NULL, 10);
+        printf("Creating interface for offset %d\n", raw_offset + 1);
     }
 
-    initialise_interface(tap_offset);
+    initialise_interface(raw_offset);
 
-    // Assume tap interface is created
-    const char *ifname = if_info.tap_name;
-    int err;
-    struct ifreq ifr;
+    // Assume raw interface is created
+    const char *ifname = if_info.raw_name;
 
-    sockfd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
+    sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sockfd == -1)
-		tst_brk(TBROK | TERRNO, "socket() with tap failed");
+		tst_brk(TBROK | TERRNO, "socket() with raw failed");
 
-    /*
-     * Initialise ifr for TAP interface.
-     */
-    memset(&ifr, 0, sizeof(ifr));
-    /*
-     * TODO: IFF_NO_PI may silently truncate packets on read().
-     */
-    ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
-    if (strlen(ifname) > IFNAMSIZ) {
-		tst_brk(TCONF, "socket() with tap failed");
-    }
-    strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+    struct sockaddr_ll veth_sock;
+    memset(&veth_sock, 0, sizeof (veth_sock));
+    veth_sock.sll_family = PF_PACKET;
+    veth_sock.sll_ifindex = if_nametoindex(ifname);
+    veth_sock.sll_protocol = htons(ETH_P_ALL);
 
-    /*
-     * Attach to the tap device; we have already verified that it exists, but
-     * see below.
-     */
-    if (ioctl(sockfd, TUNSETIFF, (void *)&ifr) == -1) {
-        err = errno;
-        close(sockfd);
-		tst_brk(TCONF, "socket() with tap failed");
-    }
-    /*
-     * If we got back a different device than the one requested, e.g. because
-     * the caller mistakenly passed in '%d' (yes, that's really in the Linux
-     * API) then fail.
-     */
-    if (strncmp(ifr.ifr_name, ifname, IFNAMSIZ) != 0) {
-		tst_brk(TCONF, "socket() with tap failed");
-    }
+	if (bind(sockfd, (struct sockaddr*)&veth_sock,
+		sizeof(veth_sock)) < 0) {
+		tst_brk(TBROK | TERRNO, "bind() with raw failed");
+	}
 }
 
 static void cleanup(void)
@@ -177,14 +158,12 @@ static void cleanup(void)
 		SAFE_CLOSE(sockfd);
 }
 
-static void verify_readfrom(void)
+static void verify_sendto(void)
 {
 
-    uint64_t start, end, i = 0, total_read;
-    int bytes_read;
+    uint64_t start, end, i = 0;
 
     struct udppkt p = { 0 };
-    struct udppkt r = { 0 };
     
     p.ip.version_ihl = 0x45;
     p.ip.type = 0x00;
@@ -205,29 +184,20 @@ static void verify_readfrom(void)
     memcpy(p.ether.target, macaddr_brd, HLEN_ETHER);
     memset(p.data, 'a', PACKET_SIZE);
 
-    if (write(sockfd, (uint8_t *)&p, sizeof p) < 0) {
-        printf("Could not read packet\n");
-    }
     SYSCALL_PERF_SET_CPU();
     start = SYSCALL_PERF_GET_TICKS();
-    while(i++ < loop_count) {
-        while ((bytes_read = read(sockfd, (uint8_t *)&p, sizeof p)) < 0 && errno == EAGAIN) {
-            //printf("Could not read packet: %d, %s, totalr:%lld\n",
-            //    errno, strerror(errno), i);
-        }
-        total_read += bytes_read;
-        if (i % 1000 == 0) {
-            printf("read packet: totalr:%lld\n", i);
+    while(i++ < loop_count || loop_count < 0) {
+        if (write(sockfd, (uint8_t *)&p, sizeof p) < 0) {
+            printf("Could not send Ping packet\n");
         }
     }
     end = SYSCALL_PERF_GET_TICKS();
     SYSCALL_PERF_MEASURE(start, end);
-    tst_res(TPASS, "Read returned %ld, total read: %lld,"
-            " bytes read: %lld", TST_RET, i - 1, total_read);
+    tst_res(TPASS, "sendto returned %ld, %lld", TST_RET, i);
 }
 
 static struct tst_test test = {
 	.setup = setup,
 	.cleanup = cleanup,
-	.test_all = verify_readfrom,
+	.test_all = verify_sendto,
 };
